@@ -9,16 +9,26 @@ theLog = ""
 thePrintedString = ""
 
 depth = 0
-progress = []
+progressByDepth = []
 
+reportNoise = 100
+reportIterator = 0
 
-def stringPrint(s):
-    global thePrintedString
-    thePrintedString += s
-    if (len(thePrintedString) > 256):
+entryProgress = ""
+
+def printReport():
+    global reportIterator
+    global reportNoise
+    global entryProgress
+    if (reportIterator%reportNoise == 0):
         os.system('cls')
-        print(thePrintedString)
-        thePrintedString = ""
+        outStr = ""
+        for i in progressByDepth:
+            if (outStr != ""):
+                outStr += "->"
+            outStr += i
+        print(entryProgress+outStr)
+    reportIterator +=1
 
 def makeFolder(outname):
     folders = outname.split("/")
@@ -34,7 +44,7 @@ def makeFolder(outname):
 def backup(filename):
     outname = "Backup{}".format(filename.replace("//","/"))
     copy = True;
-    print ".",
+    print ("."),
     log = filename+": "
     if (os.path.exists(outname)):
         if (time.ctime(os.path.getmtime(outname)) != time.ctime(os.path.getmtime(filename))) :
@@ -58,26 +68,21 @@ def backup(filename):
     return log
 
 def ScanDir(df,depth=0, verbose=True):
-    global depth
-    depth +=1
-    dot = 1
-    #print "[Scanning "+df,
     rv = []
     files = os.listdir(df)
-    stringPrint("{%d}"%depth)
-    
+
+    progressByDepth.append("---")
+
+    progress = 1
     for f in files:
-        if (verbose == True):
-            print "\n[%s %d/%d]"%(f,dot,len(files)),
-        if (dot % 64 == 0):
-            print ".",
-        dot+=1
+        progressByDepth[depth] = "%d/%d"%(progress,len(files))
         if (os.path.isdir(df+"/"+f) == True):
             rv += ScanDir(df+"/"+f,depth+1,False)
         else:
             rv += [df+"/"+f]
-    #print "]"
-    depth -=1
+        progress+=1
+        printReport()
+    progressByDepth.pop()
     return rv    
 
 def RemoveExtra(fileList,prefix):
@@ -93,7 +98,7 @@ def RemoveExtra(fileList,prefix):
             outname = "Trash{}/{}".format(prefix,f)
             makeFolder(outname)
             shutil.move(f,outname)
-            print "Deleting:",f
+            print ("Deleting:",f)
 
 def RemoveEmpties(base):
     fileList = ScanDir(base)
@@ -117,14 +122,18 @@ startTime = time.localtime();
 theLog += "Start Time: "+TimeToString(startTime)+"\n"
 
 timestamp = "%04d%02d%02d%02d%02d%02d"%(startTime.tm_year,startTime.tm_mon,startTime.tm_mday,startTime.tm_hour,startTime.tm_min,startTime.tm_sec)
-print "Bulding File List",
+print ("Bulding File List",)
 
 fileList = []
 f = open("backup.txt", "r")
 lines = f.readlines()
 f.close()
 
+entryProg = 0
+
 for toadd in lines:
+    entryProg += 1
+    entryProgress = "%d/%d:"%(entryProg,len(lines))
     toadd = toadd.strip("\n")
     if (os.path.isdir(toadd)):
         theLog += "Adding dir:"+toadd+"\n"
@@ -133,33 +142,33 @@ for toadd in lines:
         theLog += "Adding file:"+toadd+"\n"
         fileList += [toadd]
 
-print "done!"
+print ("done!")
 scanTime = time.localtime();
 theLog += "Scanning Complete At: "+TimeToString(scanTime)+"\n"
 
-print "Removing extra files",
-RemoveExtra(fileList,timestamp)
-removeTime = time.localtime();
-theLog += "Scanning Complete At: "+TimeToString(removeTime)+"\n"
-
-print "done!"
-print "Backing up"
-
-i = 0;
-for f in fileList:
-    if (i%100 == 0):
-        print "[%d/%d]"%(i,len(fileList))
-    i+=1
-    theLog += backup(f)
-print "Cleaning up",
-
-backupTime = time.localtime();
-theLog += "Backup Complete At: "+TimeToString(backupTime)+"\n"
-
-RemoveEmpties("Backup")
-print "done!"
-removeETime = time.localtime();
-theLog += "Remove Empties Complete At: "+TimeToString(removeETime)+"\n"
+##print ("Removing extra files",)
+##RemoveExtra(fileList,timestamp)
+##removeTime = time.localtime();
+##theLog += "Scanning Complete At: "+TimeToString(removeTime)+"\n"
+##
+##print ("done!")
+##print ("Backing up")
+##
+##i = 0;
+##for f in fileList:
+##    if (i%100 == 0):
+##        print ("[%d/%d]"%(i,len(fileList)))
+##    i+=1
+##    theLog += backup(f)
+##print ("Cleaning up",)
+##
+##backupTime = time.localtime();
+##theLog += "Backup Complete At: "+TimeToString(backupTime)+"\n"
+##
+##RemoveEmpties("Backup")
+##print ("done!")
+##removeETime = time.localtime();
+##theLog += "Remove Empties Complete At: "+TimeToString(removeETime)+"\n"
 
 f = open("Logs/Backup"+timestamp+".txt", "w")
 f.write(theLog)
