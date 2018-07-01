@@ -2,7 +2,7 @@ import os
 import shutil
 import time
 import sys
-
+import time
 #requires pysmb and therefore pyasn1
 
 theLog = ""
@@ -16,12 +16,21 @@ reportIterator = 0
 
 entryProgress = ""
 
+startTimer = time.time()
+
 def printReport():
     global reportIterator
     global reportNoise
     global entryProgress
+    global startTimer
+
+
     if (reportIterator%reportNoise == 0):
         os.system('cls')
+
+        currentTimer = time.time() - startTimer
+        print( "%02d:%02d|"%(currentTimer/60, currentTimer%60), end="" )
+
         outStr = ""
         for i in progressByDepth:
             if (outStr != ""):
@@ -68,21 +77,25 @@ def backup(filename):
     return log
 
 def ScanDir(df,depth=0, verbose=True):
+    global theLog
     rv = []
-    files = os.listdir(df)
+    try:
+        files = os.listdir(df)
 
-    progressByDepth.append("---")
+        progressByDepth.append("---")
 
-    progress = 1
-    for f in files:
-        progressByDepth[depth] = "%d/%d"%(progress,len(files))
-        if (os.path.isdir(df+"/"+f) == True):
-            rv += ScanDir(df+"/"+f,depth+1,False)
-        else:
-            rv += [df+"/"+f]
-        progress+=1
-        printReport()
-    progressByDepth.pop()
+        progress = 1
+        for f in files:
+            progressByDepth[depth] = "%d/%d"%(progress,len(files))
+            if (os.path.isdir(df+"/"+f) == True):
+                rv += ScanDir(df+"/"+f,depth+1,False)
+            else:
+                rv += [df+"/"+f]
+            progress+=1
+            printReport()
+        progressByDepth.pop()
+    except FileNotFoundError:
+        theLog += "Folder {} not found.\n".format(df)
     return rv    
 
 def RemoveExtra(fileList,prefix):
@@ -146,29 +159,29 @@ print ("done!")
 scanTime = time.localtime();
 theLog += "Scanning Complete At: "+TimeToString(scanTime)+"\n"
 
-##print ("Removing extra files",)
-##RemoveExtra(fileList,timestamp)
-##removeTime = time.localtime();
-##theLog += "Scanning Complete At: "+TimeToString(removeTime)+"\n"
-##
-##print ("done!")
-##print ("Backing up")
-##
-##i = 0;
-##for f in fileList:
-##    if (i%100 == 0):
-##        print ("[%d/%d]"%(i,len(fileList)))
-##    i+=1
-##    theLog += backup(f)
-##print ("Cleaning up",)
-##
-##backupTime = time.localtime();
-##theLog += "Backup Complete At: "+TimeToString(backupTime)+"\n"
-##
-##RemoveEmpties("Backup")
-##print ("done!")
-##removeETime = time.localtime();
-##theLog += "Remove Empties Complete At: "+TimeToString(removeETime)+"\n"
+print ("Removing extra files",)
+RemoveExtra(fileList,timestamp)
+removeTime = time.localtime();
+theLog += "Scanning Complete At: "+TimeToString(removeTime)+"\n"
+
+print ("done!")
+print ("Backing up")
+
+i = 0;
+for f in fileList:
+    if (i%100 == 0):
+        print ("[%d/%d]"%(i,len(fileList)))
+    i+=1
+    theLog += backup(f)
+print ("Cleaning up",)
+
+backupTime = time.localtime();
+theLog += "Backup Complete At: "+TimeToString(backupTime)+"\n"
+
+RemoveEmpties("Backup")
+print ("done!")
+removeETime = time.localtime();
+theLog += "Remove Empties Complete At: "+TimeToString(removeETime)+"\n"
 
 f = open("Logs/Backup"+timestamp+".txt", "w")
 f.write(theLog)
