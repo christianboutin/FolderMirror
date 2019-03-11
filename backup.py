@@ -96,6 +96,8 @@ def ScanDir(df,depth=0, verbose=True):
         progressByDepth.pop()
     except FileNotFoundError:
         theLog += "Folder {} not found.\n".format(df)
+    except OSError:
+        theLog += "Folder {} resultet in OSError.\n".format(df)
     return rv    
 
 def RemoveExtra(fileList,prefix):
@@ -110,8 +112,12 @@ def RemoveExtra(fileList,prefix):
         if (delete == True):
             outname = "Trash{}/{}".format(prefix,f)
             makeFolder(outname)
-            shutil.move(f,outname)
-            print ("Deleting:",f)
+            try:
+                shutil.move(f,outname)
+                print ("Deleting:",f)
+            except FileNotFoundError:
+                theLog += "File {} could not be removed because of a FileNotFoundError.\n".format(f)
+                
 
 def RemoveEmpties(base):
     fileList = ScanDir(base)
