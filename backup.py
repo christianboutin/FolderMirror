@@ -3,60 +3,51 @@ import shutil
 import time
 import sys
 import time
+import json
+import fnmatch
 #requires pysmb and therefore pyasn1
 
-theLog = ""
-thePrintedString = ""
+the_log = ""
+the_printed_string = ""
 
 depth = 0
-progressByDepth = []
+progress_by_depth = []
 
-reportNoise = 100
-reportIterator = 0
+report_noise = 100
+report_iterator = 0
 
-entryProgress = ""
+entry_progress = ""
 
-startTimer = time.time()
+start_timer = time.time()
 
-def printReport():
-    global reportIterator
-    global reportNoise
-    global entryProgress
-    global startTimer
+def print_report():
+    global report_iterator
+    global report_noise
+    global entry_progress
+    global start_timer
 
 
-    if (reportIterator%reportNoise == 0):
+    if (report_iterator%report_noise == 0):
         os.system('cls')
 
-        currentTimer = time.time() - startTimer
-        print( "%02d:%02d|"%(currentTimer/60, currentTimer%60), end="" )
+        current_timer = time.time() - start_timer
+        print( "%02d:%02d|"%(current_timer/60, current_timer%60), end="" )
 
         outStr = ""
-        for i in progressByDepth:
+        for i in progress_by_depth:
             if (outStr != ""):
                 outStr += "->"
             outStr += i
-        print(entryProgress+outStr)
-    reportIterator +=1
-
-def makeFolder(outname):
-    folders = outname.split("/")
-    dstfolder = "."
-    folders.pop()
-    for f in folders:
-        dstfolder += "/"+f
-        if (not os.path.exists(dstfolder)):
-            os.mkdir(dstfolder)
-            #log += "[CF:"+dstfolder+"]"
-    
+        print(entry_progress+outStr)
+    report_iterator +=1
 
 def backup(filename):
-    outname = "Backup{}".format(filename.replace("//","/"))
+    outname = "{}/{}".format(destination_root, filename.strip(source_root).replace("//","/").replace(":","_"))
     copy = True;
     print ("."),
     log = filename+": "
     if (os.path.exists(outname)):
-        if (time.ctime(os.path.getmtime(outname)) != time.ctime(os.path.getmtime(filename))) :
+        if (time.ctime(os.path.getmtime(outname)) != time.ctime(os.path.getmtime("{}/{}".format(source_root,filename)))) :
             log += "{} has different date.".format(outname)
             copy = True
         elif (os.path.getsize(outname) != os.path.getsize(outname)):
@@ -66,7 +57,10 @@ def backup(filename):
             log += "{} is identical".format(outname)
             copy = False
     if (copy == True):
-        makeFolder(outname);
+        try:
+            os.makedirs(outname);
+        except:
+            pass
         try:
             shutil.copy2(filename,outname)
             log += " [copied]\n"
@@ -76,114 +70,148 @@ def backup(filename):
         log += " [skipped]\n"
     return log
 
-def ScanDir(df,depth=0, verbose=True):
-    global theLog
+def scan_dir(df,depth=0, verbose=True, patterns = ["*.*"]):
+    global the_log
+
     rv = []
-    try:
-        files = os.listdir(df)
-
-        progressByDepth.append("---")
-
-        progress = 1
+    nb_files = 0
+    for root,subdirs,files in os.walk(df):
         for f in files:
-            progressByDepth[depth] = "%d/%d"%(progress,len(files))
-            if (os.path.isdir(df+"/"+f) == True):
-                rv += ScanDir(df+"/"+f,depth+1,False)
-            else:
-                rv += [df+"/"+f]
-            progress+=1
-            printReport()
-        progressByDepth.pop()
-    except FileNotFoundError:
-        theLog += "Folder {} not found.\n".format(df)
+            for p in patterns:
+                if (fnmatch.fnmatch(f, p)):
+                    rv += [os.path.normpath("{}/{}".format(root, f))]
+                    break
+        for s in subdirs:
+            rv += scan_dir("{}/{}".format(root, s), patterns = patterns)
+                
+    # try:
+    #     files = os.listdir(df)
+
+    #     progressByDepth.append("---")
+
+    #     progress = 1
+    #     for f in files:
+    #         progressByDepth[depth] = "%d/%d"%(progress,len(files))
+    #         if (os.path.isdir(df+"/"+f) == True):
+    #             rv += ScanDir(df+"/"+f,depth+1,False, patterns)
+    #         else:
+    #             for p in patterns:
+    #                 if (fnmatch.fnmatch(f, p)):
+    #                     rv += [df+"/"+f]
+    #                     break
+    #         progress+=1
+    #         printReport()
+    #     progressByDepth.pop()
+    # except FileNotFoundError:
+    #     theLog += "Folder {} not found.\n".format(df)
     return rv    
 
-def RemoveExtra(fileList,prefix):
-    files = ScanDir("Backup")
+def remove_extra(file_list,prefix):
+    files = scan_dir(destination_root, patterns)
+
     for f in files:
-        mf = f.replace("Backup/","//",1)
-        delete = True
-        for df in fileList:
-            if (df == mf):
-                delete = False
-                break
-        if (delete == True):
+        stripped_file = f.strip(destination_root)
+        normpath = os.path.normpath("{}/{}".format(source_root, stripped_file))
+        if (normpath not in file_list):
             outname = "Trash{}/{}".format(prefix,f)
-            makeFolder(outname)
+            try:
+                os.makedirs(outname)
+            except:
+                pass
             shutil.move(f,outname)
             print ("Deleting:",f)
 
-def RemoveEmpties(base):
-    fileList = ScanDir(base)
-    if not os.listdir(base):
-        print ("Removing:"+base)
-        os.rmdir(base)
-        return True
-    else:
-        for f in os.listdir(base):
-            if (os.path.isdir(base+"/"+f) == True):
-                if (RemoveEmpties(base+"/"+f) == True):
-                    os.rmdir(base)
-                    return True
+def remove_empties(base):
+    try:
+        if not os.listdir(base):
+            print ("Removing:"+base)
+            os.rmdir(base)
+            return True
+        else:
+            for f in os.listdir(base):
+                if (os.path.isdir(base+"/"+f) == True):
+                    if (remove_empties(base+"/"+f) == True):
+                        os.rmdir(base)
+                        return True
+    except FileNotFoundError:
+        pass
     return False
 
-def TimeToString(t):
+def time_to_string(t):
     return "%04d/%02d/%02d %02d:%02d"%(t.tm_year,t.tm_mon,t.tm_mday,t.tm_hour,t.tm_min)
     
 
-startTime = time.localtime();
-theLog += "Start Time: "+TimeToString(startTime)+"\n"
+start_time = time.localtime();
+the_log += "Start Time: "+time_to_string(start_time)+"\n"
 
-timestamp = "%04d%02d%02d%02d%02d%02d"%(startTime.tm_year,startTime.tm_mon,startTime.tm_mday,startTime.tm_hour,startTime.tm_min,startTime.tm_sec)
+timestamp = "%04d%02d%02d%02d%02d%02d"%(start_time.tm_year,start_time.tm_mon,start_time.tm_mday,start_time.tm_hour,start_time.tm_min,start_time.tm_sec)
 print ("Bulding File List",)
 
-fileList = []
-f = open("backup.txt", "r")
-lines = f.readlines()
-f.close()
+file_list = []
+try:
+    f = open("backup.txt", "r")
+    lines = f.readlines()
+    f.close()
 
-entryProg = 0
+    entry_prog = 0
 
-for toadd in lines:
-    entryProg += 1
-    entryProgress = "%d/%d:"%(entryProg,len(lines))
-    toadd = toadd.strip("\n")
-    if (os.path.isdir(toadd)):
-        theLog += "Adding dir:"+toadd+"\n"
-        fileList += ScanDir(toadd)
-    else:
-        theLog += "Adding file:"+toadd+"\n"
-        fileList += [toadd]
+    for toadd in lines:
+        entry_prog += 1
+        entry_progress = "%d/%d:"%(entry_prog,len(lines))
+        toadd = toadd.strip("\n")
+        if (os.path.isdir(toadd)):
+            the_log += "Adding dir:"+toadd+"\n"
+            file_list += scan_dir(toadd)
+        else:
+            the_log += "Adding file:"+toadd+"\n"
+            file_list += [toadd]
+
+except FileNotFoundError:
+    json = json.load(open("backup.json", "r"))
+    patterns = json["patterns"]
+    source_root = json["source_root"]
+    for source in json["sources"]:
+        file_list += scan_dir("{}/{}".format(source_root, source), patterns = patterns)
+    destination_root = json["destination_root"]
+    
+    #patterns = json["patterns"]
+
+
+for k, v in enumerate(file_list):
+    file_list[k] = v.strip(os.path.normpath(source_root))
 
 print ("done!")
-scanTime = time.localtime();
-theLog += "Scanning Complete At: "+TimeToString(scanTime)+"\n"
+scan_time = time.localtime();
+the_log += "Scanning Complete At: "+time_to_string(scan_time)+"\n"
 
 print ("Removing extra files",)
-RemoveExtra(fileList,timestamp)
-removeTime = time.localtime();
-theLog += "Scanning Complete At: "+TimeToString(removeTime)+"\n"
+#RemoveExtra(file_list,timestamp)
+remove_time = time.localtime();
+the_log += "Scanning Complete At: "+time_to_string(remove_time)+"\n"
 
 print ("done!")
 print ("Backing up")
 
 i = 0;
-for f in fileList:
+for f in file_list:
     if (i%100 == 0):
-        print ("[%d/%d]"%(i,len(fileList)))
+        print ("[%d/%d]"%(i,len(file_list)))
     i+=1
-    theLog += backup(f)
+    the_log += backup("{}/{}".format(source_root,f))
 print ("Cleaning up",)
 
-backupTime = time.localtime();
-theLog += "Backup Complete At: "+TimeToString(backupTime)+"\n"
+backup_time = time.localtime();
+the_log += "Backup Complete At: "+time_to_string(backup_time)+"\n"
 
-RemoveEmpties("Backup")
+remove_empties(destination_root)
 print ("done!")
-removeETime = time.localtime();
-theLog += "Remove Empties Complete At: "+TimeToString(removeETime)+"\n"
+remove_end_time = time.localtime();
+the_log += "Remove Empties Complete At: "+time_to_string(remove_end_time)+"\n"
 
 f = open("Logs/Backup"+timestamp+".txt", "w")
-f.write(theLog)
+f.write(the_log)
 f.close()
 
+
+
+#exec(open("./FolderMirror/backup.py").read())
