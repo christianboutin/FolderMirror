@@ -114,7 +114,6 @@ def remove_empties(base):
             for f in os.listdir(base):
                 if (os.path.isdir(base+"/"+f) == True):
                     if (remove_empties(base+"/"+f) == True):
-                        os.rmdir(base)
                         return True
     except FileNotFoundError:
         pass
