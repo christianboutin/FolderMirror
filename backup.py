@@ -42,27 +42,33 @@ def print_report():
     report_iterator +=1
 
 def backup(filename):
-    outname = "{}/{}".format(destination_root, filename.strip(source_root).replace("//","/").replace(":","_"))
+    in_name = "{}/{}".format(source_root, filename)
+    out_name = "{}/{}".format(destination_root, filename)
     copy = True;
     print ("."),
     log = filename+": "
-    if (os.path.exists(outname)):
-        if (time.ctime(os.path.getmtime(outname)) != time.ctime(os.path.getmtime("{}/{}".format(source_root,filename)))) :
-            log += "{} has different date.".format(outname)
+    if (os.path.exists(out_name)):
+        time_date_a = time.ctime(os.path.getmtime(out_name))
+        time_date_b = time.ctime(os.path.getmtime(in_name))
+        
+        if (time.ctime(os.path.getmtime(out_name)) != time.ctime(os.path.getmtime(in_name))) :
+            log += "{} has different date.".format(out_name)
             copy = True
-        elif (os.path.getsize(outname) != os.path.getsize(outname)):
-            log += "{} has different size.".format(outname)
+        elif (os.path.getsize(out_name) != os.path.getsize(out_name)):
+            log += "{} has different size.".format(out_name)
             copy = True
         else:
-            log += "{} is identical".format(outname)
+            log += "{} is identical".format(out_name)
             copy = False
     if (copy == True):
+        out_dir = os.path.dirname(out_name)
         try:
-            os.makedirs(outname);
+            os.makedirs(out_dir);
         except:
             pass
         try:
-            shutil.copy2(filename,outname)
+            shutil.copy(in_name,out_dir)
+            shutil.copystat(in_name,out_name)
             log += " [copied]\n"
         except:
             log += " [error]\n"
@@ -81,41 +87,18 @@ def scan_dir(df,depth=0, verbose=True, patterns = ["*.*"]):
                 if (fnmatch.fnmatch(f, p)):
                     rv += [os.path.normpath("{}/{}".format(root, f))]
                     break
-        for s in subdirs:
-            rv += scan_dir("{}/{}".format(root, s), patterns = patterns)
-                
-    # try:
-    #     files = os.listdir(df)
-
-    #     progressByDepth.append("---")
-
-    #     progress = 1
-    #     for f in files:
-    #         progressByDepth[depth] = "%d/%d"%(progress,len(files))
-    #         if (os.path.isdir(df+"/"+f) == True):
-    #             rv += ScanDir(df+"/"+f,depth+1,False, patterns)
-    #         else:
-    #             for p in patterns:
-    #                 if (fnmatch.fnmatch(f, p)):
-    #                     rv += [df+"/"+f]
-    #                     break
-    #         progress+=1
-    #         printReport()
-    #     progressByDepth.pop()
-    # except FileNotFoundError:
-    #     theLog += "Folder {} not found.\n".format(df)
     return rv    
 
 def remove_extra(file_list,prefix):
     files = scan_dir(destination_root, patterns)
 
     for f in files:
-        stripped_file = f.strip(destination_root)
-        normpath = os.path.normpath("{}/{}".format(source_root, stripped_file))
-        if (normpath not in file_list):
+        stripped_file = os.path.relpath(f, destination_root)
+        #normpath = os.path.normpath("{}/{}".format(source_root, stripped_file))
+        if (stripped_file not in file_list):
             outname = "Trash{}/{}".format(prefix,f)
             try:
-                os.makedirs(outname)
+                os.makedirs(os.path.dirname(outname))
             except:
                 pass
             shutil.move(f,outname)
@@ -178,14 +161,14 @@ except FileNotFoundError:
 
 
 for k, v in enumerate(file_list):
-    file_list[k] = v.strip(os.path.normpath(source_root))
+    file_list[k] = os.path.relpath(file_list[k], source_root)
 
 print ("done!")
 scan_time = time.localtime();
 the_log += "Scanning Complete At: "+time_to_string(scan_time)+"\n"
 
 print ("Removing extra files",)
-#RemoveExtra(file_list,timestamp)
+remove_extra(file_list,timestamp)
 remove_time = time.localtime();
 the_log += "Scanning Complete At: "+time_to_string(remove_time)+"\n"
 
@@ -197,7 +180,7 @@ for f in file_list:
     if (i%100 == 0):
         print ("[%d/%d]"%(i,len(file_list)))
     i+=1
-    the_log += backup("{}/{}".format(source_root,f))
+    the_log += backup("{}".format(f))
 print ("Cleaning up",)
 
 backup_time = time.localtime();
@@ -208,10 +191,12 @@ print ("done!")
 remove_end_time = time.localtime();
 the_log += "Remove Empties Complete At: "+time_to_string(remove_end_time)+"\n"
 
+try:
+    os.makedirs("Logs")
+except:
+    pass
+
 f = open("Logs/Backup"+timestamp+".txt", "w")
 f.write(the_log)
 f.close()
 
-
-
-#exec(open("./FolderMirror/backup.py").read())
