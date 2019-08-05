@@ -101,6 +101,8 @@ def ScanDir(df,depth=0, verbose=True):
     return rv    
 
 def RemoveExtra(fileList,prefix):
+    global theLog
+
     files = ScanDir("Backup")
     for f in files:
         mf = f.replace("Backup/","//",1)
