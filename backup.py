@@ -3,6 +3,7 @@ import shutil
 import time
 import sys
 import time
+import datetime
 import json
 import fnmatch
 #requires pysmb and therefore pyasn1
@@ -19,6 +20,18 @@ report_iterator = 0
 entry_progress = ""
 
 start_timer = time.time()
+
+dot_count = 0
+
+def dot():
+    global dot_count
+    dot_count += 1
+    if (dot_count % 100 == 0):
+        print(".", end="")
+        if (dot_count % 10000 == 0):
+            print(str(datetime.datetime.now()))
+            dot_count = 0
+
 
 def print_report():
     global report_iterator
@@ -45,7 +58,7 @@ def backup(filename):
     in_name = "{}/{}".format(source_root, filename)
     out_name = "{}/{}".format(destination_root, filename)
     copy = True;
-    print ("."),
+    dot()
     log = filename+": "
     if (os.path.exists(out_name)):
         time_date_a = time.ctime(os.path.getmtime(out_name))
@@ -63,7 +76,7 @@ def backup(filename):
     if (copy == True):
         out_dir = os.path.dirname(out_name)
         try:
-            os.makedirs(out_dir);
+            os.makedirs(out_dir)
         except:
             pass
         try:
@@ -84,25 +97,33 @@ def scan_dir(df,depth=0, verbose=True, patterns = ["*.*"]):
     for root,subdirs,files in os.walk(df):
         for f in files:
             for p in patterns:
+                dot()
                 if (fnmatch.fnmatch(f, p)):
                     rv += [os.path.normpath("{}/{}".format(root, f))]
                     break
     return rv    
 
 def remove_extra(file_list,prefix):
+    global the_log
+
     files = scan_dir(destination_root, patterns)
 
     for f in files:
+        dot()
         stripped_file = os.path.relpath(f, destination_root)
-        #normpath = os.path.normpath("{}/{}".format(source_root, stripped_file))
         if (stripped_file not in file_list):
             outname = "Trash{}/{}".format(prefix,f)
             try:
                 os.makedirs(os.path.dirname(outname))
             except:
                 pass
-            shutil.move(f,outname)
-            print ("Deleting:",f)
+            try:
+                shutil.move(f,outname)
+                print ("Deleting:",f)
+            except FileNotFoundError:
+                the_log += "File {} could not be removed because of a FileNotFoundError.\n".format(f)
+
+            
 
 def remove_empties(base):
     try:
@@ -112,6 +133,7 @@ def remove_empties(base):
             return True
         else:
             for f in os.listdir(base):
+                dot()
                 if (os.path.isdir(base+"/"+f) == True):
                     if (remove_empties(base+"/"+f) == True):
                         return True
@@ -127,7 +149,7 @@ start_time = time.localtime();
 the_log += "Start Time: "+time_to_string(start_time)+"\n"
 
 timestamp = "%04d%02d%02d%02d%02d%02d"%(start_time.tm_year,start_time.tm_mon,start_time.tm_mday,start_time.tm_hour,start_time.tm_min,start_time.tm_sec)
-print ("Bulding File List",)
+print ("Building File List",)
 
 file_list = []
 try:
@@ -153,14 +175,21 @@ except FileNotFoundError:
     patterns = json["patterns"]
     source_root = json["source_root"]
     for source in json["sources"]:
-        file_list += scan_dir("{}/{}".format(source_root, source), patterns = patterns)
-    destination_root = json["destination_root"]
+        print("Scanning {}".format(source))
+        file_list += scan_dir("{}\\{}".format(source_root, source), patterns = patterns)
+    destination_root = os.path.normpath(json["destination_root"])
     
     #patterns = json["patterns"]
+if (source_root[0:2] == "//"):
+    source_root = "\\{}".format(os.path.normpath(source_root))
+else:
+    source_root = os.path.normpath(source_root)
 
 
 for k, v in enumerate(file_list):
-    file_list[k] = os.path.relpath(file_list[k], source_root)
+    file_list[k] = os.path.normpath(file_list[k])[len(source_root):].lstrip("\\")
+
+    #file_list[k] = os.path.relpath(file_list[k], )
 
 print ("done!")
 scan_time = time.localtime();
@@ -174,7 +203,7 @@ the_log += "Scanning Complete At: "+time_to_string(remove_time)+"\n"
 print ("done!")
 print ("Backing up")
 
-i = 0;
+i = 0
 for f in file_list:
     if (i%100 == 0):
         print ("[%d/%d]"%(i,len(file_list)))
